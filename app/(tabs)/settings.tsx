@@ -1,8 +1,19 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function SettingsScreen() {
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
@@ -99,7 +110,10 @@ export default function SettingsScreen() {
 
         {/* Danger Zone */}
         <View style={styles.section}>
-          <TouchableOpacity style={[styles.settingItem, styles.dangerItem]}>
+          <TouchableOpacity 
+            style={[styles.settingItem, styles.dangerItem]}
+            onPress={handleLogout}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.iconContainer, { backgroundColor: 'rgba(244, 67, 54, 0.1)' }]}>
                 <Ionicons name="log-out-outline" size={20} color="#F44336" />

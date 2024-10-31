@@ -1,8 +1,91 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../src/context/AuthContext';
+import LoadingOverlay from '../../src/components/LoadingOverlay';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface UserProfile {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+  createdAt: string;
+}
 
 export default function ProfileScreen() {
+  const { user, isLoading: authLoading } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      setIsLoading(true);
+      const authData = await AsyncStorage.getItem('auth_data');
+      console.log('Auth data:', authData); // Debug log
+
+      if (!authData) {
+        throw new Error('No authentication data found');
+      }
+
+      const { token } = JSON.parse(authData);
+      console.log('Token from auth data:', token?.substring(0, 20) + '...'); // Debug log
+
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const API_URL = Platform.OS === 'ios' 
+        ? 'http://localhost:5001/api'
+        : 'http://10.0.2.2:5001/api';
+
+      console.log('Making request to:', `${API_URL}/auth/profile`); // Debug log
+
+      const response = await fetch(`${API_URL}/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Response status:', response.status); // Debug log
+      const data = await response.json();
+      console.log('Response data:', data); // Debug log
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch profile');
+      }
+
+      setProfile(data.data);
+    } catch (error: any) {
+      console.error('Error fetching profile:', error);
+      setError(error.message || 'Failed to load profile');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading || !profile) {
+    return <LoadingOverlay />;
+  }
+
+  const getInitials = () => {
+    return `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
@@ -21,30 +104,10 @@ export default function ProfileScreen() {
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JD</Text>
-            </View>
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Ionicons name="camera" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.name}>John Doe</Text>
-          <Text style={styles.role}>Inventory Manager</Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>128</Text>
-              <Text style={styles.statLabel}>Items Added</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>47</Text>
-              <Text style={styles.statLabel}>Updates</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>8</Text>
-              <Text style={styles.statLabel}>Months</Text>
+              <Text style={styles.avatarText}>{getInitials()}</Text>
             </View>
           </View>
+          <Text style={styles.name}>{`${profile.firstName} ${profile.lastName}`}</Text>
         </View>
 
         {/* Contact Information */}
@@ -57,7 +120,7 @@ export default function ProfileScreen() {
               </View>
               <View>
                 <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>john.doe@example.com</Text>
+                <Text style={styles.infoValue}>{profile.email}</Text>
               </View>
             </View>
             <View style={styles.infoDivider} />
@@ -67,51 +130,33 @@ export default function ProfileScreen() {
               </View>
               <View>
                 <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>+1 234 567 890</Text>
+                <Text style={styles.infoValue}>{profile.phone}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Work Information */}
+        {/* Account Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Work Information</Text>
+          <Text style={styles.sectionTitle}>Account Information</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoItem}>
               <View style={styles.infoIcon}>
-                <Ionicons name="business-outline" size={20} color="#9E86FF" />
+                <Ionicons name="calendar-outline" size={20} color="#9E86FF" />
               </View>
               <View>
-                <Text style={styles.infoLabel}>Department</Text>
-                <Text style={styles.infoValue}>Warehouse Operations</Text>
-              </View>
-            </View>
-            <View style={styles.infoDivider} />
-            <View style={styles.infoItem}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="location-outline" size={20} color="#9E86FF" />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>Main Warehouse, Building A</Text>
+                <Text style={styles.infoLabel}>Joined</Text>
+                <Text style={styles.infoValue}>{formatDate(profile.createdAt)}</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Account Actions */}
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="shield-checkmark-outline" size={20} color="#9E86FF" />
-            <Text style={styles.actionButtonText}>Privacy Settings</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="notifications-outline" size={20} color="#9E86FF" />
-            <Text style={styles.actionButtonText}>Notifications</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -265,5 +310,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     marginLeft: 12,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#F44336',
+    textAlign: 'center',
   },
 }); 
