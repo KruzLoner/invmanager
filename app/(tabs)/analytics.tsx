@@ -1,8 +1,72 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import LoadingOverlay from '../../src/components/LoadingOverlay';
+
+interface AnalyticsData {
+  overview: {
+    totalValue: number;
+    itemsSold: number;
+  };
+  topPerforming: Array<{
+    _id: string;
+    name: string;
+    quantity: number;
+    status: string;
+  }>;
+  health: {
+    lowStock: number;
+    outOfStock: number;
+    inStock: number;
+  };
+}
 
 export default function AnalyticsScreen() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const authData = await AsyncStorage.getItem('auth_data');
+      if (!authData) throw new Error('Not authenticated');
+
+      const { token } = JSON.parse(authData);
+      const API_URL = Platform.OS === 'ios' 
+        ? 'http://localhost:5001/api'
+        : 'http://10.0.2.2:5001/api';
+
+      const response = await fetch(`${API_URL}/inventory/analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics');
+      }
+
+      const data = await response.json();
+      setAnalytics(data.data);
+    } catch (error: any) {
+      console.error('Error fetching analytics:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  if (isLoading || !analytics) {
+    return <LoadingOverlay />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView 
@@ -25,29 +89,18 @@ export default function AnalyticsScreen() {
         >
           <View style={styles.overviewCard}>
             <View style={styles.overviewIconContainer}>
-              <Ionicons name="trending-up" size={20} color="#4CAF50" />
+              <Ionicons name="cube" size={20} color="#4CAF50" />
             </View>
-            <Text style={styles.overviewLabel}>Total Sales</Text>
-            <Text style={styles.overviewValue}>$12,450</Text>
-            <Text style={styles.overviewTrend}>+12.5%</Text>
+            <Text style={styles.overviewLabel}>Total Items</Text>
+            <Text style={styles.overviewValue}>{analytics.overview.totalValue}</Text>
           </View>
 
           <View style={styles.overviewCard}>
             <View style={[styles.overviewIconContainer, { backgroundColor: 'rgba(255, 138, 101, 0.1)' }]}>
-              <Ionicons name="cube" size={20} color="#FF8A65" />
+              <Ionicons name="trending-up" size={20} color="#FF8A65" />
             </View>
             <Text style={styles.overviewLabel}>Items Sold</Text>
-            <Text style={styles.overviewValue}>1,245</Text>
-            <Text style={[styles.overviewTrend, { color: '#FF8A65' }]}>-3.2%</Text>
-          </View>
-
-          <View style={styles.overviewCard}>
-            <View style={[styles.overviewIconContainer, { backgroundColor: 'rgba(158, 134, 255, 0.1)' }]}>
-              <Ionicons name="people" size={20} color="#9E86FF" />
-            </View>
-            <Text style={styles.overviewLabel}>Customers</Text>
-            <Text style={styles.overviewValue}>324</Text>
-            <Text style={styles.overviewTrend}>+8.1%</Text>
+            <Text style={styles.overviewValue}>{analytics.overview.itemsSold}</Text>
           </View>
         </ScrollView>
 
@@ -55,35 +108,19 @@ export default function AnalyticsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Top Performing Items</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Performance Cards */}
-          {['MacBook Charger', 'USB-C Cable', 'Wireless Mouse'].map((item, index) => (
-            <View key={index} style={styles.performanceCard}>
+          {analytics.topPerforming.map((item, index) => (
+            <View key={item._id} style={styles.performanceCard}>
               <View style={styles.performanceInfo}>
                 <Text style={styles.performanceRank}>#{index + 1}</Text>
-                <Text style={styles.performanceName}>{item}</Text>
+                <Text style={styles.performanceName}>{item.name}</Text>
               </View>
               <View style={styles.performanceStats}>
                 <Text style={styles.performanceValue}>
-                  {120 - (index * 35)} units
+                  {item.quantity} units
                 </Text>
-                <View style={[styles.trendBadge, index === 1 && styles.trendBadgeDown]}>
-                  <Ionicons 
-                    name={index === 1 ? "arrow-down" : "arrow-up"} 
-                    size={12} 
-                    color={index === 1 ? "#FF8A65" : "#4CAF50"} 
-                  />
-                  <Text style={[
-                    styles.trendText,
-                    index === 1 && styles.trendTextDown
-                  ]}>
-                    {index === 1 ? "2.3%" : "5.2%"}
-                  </Text>
-                </View>
               </View>
             </View>
           ))}
@@ -93,20 +130,27 @@ export default function AnalyticsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Inventory Health</Text>
           <View style={styles.healthGrid}>
-            {[
-              { title: 'Low Stock', value: '23', icon: 'alert-circle', color: '#FF8A65' },
-              { title: 'To Expire', value: '12', icon: 'time', color: '#FFB74D' },
-              { title: 'In Transit', value: '45', icon: 'car', color: '#4CAF50' },
-              { title: 'Returns', value: '8', icon: 'return-up-back', color: '#9E86FF' },
-            ].map((item, index) => (
-              <View key={index} style={styles.healthCard}>
-                <View style={[styles.healthIconContainer, { backgroundColor: `${item.color}20` }]}>
-                  <Ionicons name={item.icon} size={24} color={item.color} />
-                </View>
-                <Text style={styles.healthValue}>{item.value}</Text>
-                <Text style={styles.healthLabel}>{item.title}</Text>
+            <View style={styles.healthCard}>
+              <View style={[styles.healthIconContainer, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
               </View>
-            ))}
+              <Text style={styles.healthValue}>{analytics.health.inStock}</Text>
+              <Text style={styles.healthLabel}>In Stock</Text>
+            </View>
+            <View style={styles.healthCard}>
+              <View style={[styles.healthIconContainer, { backgroundColor: 'rgba(255, 138, 101, 0.1)' }]}>
+                <Ionicons name="alert-circle" size={24} color="#FF8A65" />
+              </View>
+              <Text style={styles.healthValue}>{analytics.health.lowStock}</Text>
+              <Text style={styles.healthLabel}>Low Stock</Text>
+            </View>
+            <View style={styles.healthCard}>
+              <View style={[styles.healthIconContainer, { backgroundColor: 'rgba(244, 67, 54, 0.1)' }]}>
+                <Ionicons name="close-circle" size={24} color="#F44336" />
+              </View>
+              <Text style={styles.healthValue}>{analytics.health.outOfStock}</Text>
+              <Text style={styles.healthLabel}>Out of Stock</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -170,10 +214,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 4,
   },
-  overviewTrend: {
-    fontSize: 14,
-    color: '#4CAF50',
-  },
   section: {
     paddingHorizontal: 20,
     marginBottom: 24,
@@ -188,10 +228,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#9E86FF',
   },
   performanceCard: {
     flexDirection: 'row',
@@ -223,25 +259,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     marginBottom: 4,
-  },
-  trendBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  trendBadgeDown: {
-    backgroundColor: 'rgba(255, 138, 101, 0.1)',
-  },
-  trendText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    marginLeft: 4,
-  },
-  trendTextDown: {
-    color: '#FF8A65',
   },
   healthGrid: {
     flexDirection: 'row',

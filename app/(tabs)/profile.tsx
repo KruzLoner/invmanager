@@ -12,7 +12,6 @@ interface UserProfile {
   lastName: string;
   email: string;
   phone: string;
-  role: string;
   createdAt: string;
 }
 
